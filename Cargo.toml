@@ -10,6 +10,3 @@ members = [
 
 [profile.dev]
 opt-level = 0
-
-[patch.crates-io]
-rlua = { path = "./rlua-st" }

@@ -3,14 +3,14 @@ use std::rc::Rc;
 use std::sync::mpsc::*;
 
 use anyhow::Context as _;
-use rlua::Lua;
-use rlua::prelude::{LuaContext, LuaError};
+use mlua::Lua;
+use mlua::prelude::LuaError;
 
 use crate::handle_lua_result;
 
 pub enum Message {
     ChildTerminated,
-    LuaRun(Box<dyn Send + Sync + Fn(LuaContext) -> Result<(), LuaError>>),
+    LuaRun(Box<dyn Send + Sync + Fn(&Lua) -> Result<(), LuaError>>),
 }
 
 struct Context {
@@ -55,17 +55,12 @@ pub fn wait_on_evloop(lua: Rc<Lua>) {
             match message {
                 Message::ChildTerminated => break,
                 Message::LuaRun(callback) => {
-                    let should_continue = lua.context(|ctx| {
-                        let result = callback(ctx);
-
-                        if result.is_err() {
-                            println!("[ERROR] An error occured inside the event loop. The event loop will terminate.");
-                            handle_lua_result(result.context("evloop callback failed"));
-                            return false;
-                        }
-
-                        true
-                    });
+                    let result = callback(&lua);
+                    let should_continue = if result.is_err() {
+                        println!("[ERROR] An error occured inside the event loop. The event loop will terminate.");
+                        handle_lua_result(result.context("evloop callback failed"));
+                        return false;
+                    } else { true };
 
                     if !should_continue {
                         break;
@@ -73,5 +68,7 @@ pub fn wait_on_evloop(lua: Rc<Lua>) {
                 }
             }
         }
-    })
+
+        true
+    });
 }

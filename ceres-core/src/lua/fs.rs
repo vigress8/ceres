@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use notify::{DebouncedEvent, RecursiveMode, Watcher, watcher};
 use path_absolutize::Absolutize;
-use rlua::prelude::*;
+use mlua::prelude::*;
 use thiserror::Error;
 use walkdir::WalkDir;
 
@@ -33,6 +33,7 @@ fn validate_path(path: &str) -> Result<PathBuf, LuaFileError> {
     let path = PathBuf::from(&path);
 
     path.absolutize()
+        .map(PathBuf::from)
         .map_err(|err| LuaFileError::PathCanonizationFailed {
             cause: IoError::new(path, err),
         })
@@ -57,10 +58,10 @@ fn lua_copy_file(from: &str, to: &str) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn lua_read_file<'lua>(
-    ctx: LuaContext<'lua>,
+fn lua_read_file(
+    ctx: &Lua,
     path: &str,
-) -> Result<LuaString<'lua>, anyhow::Error> {
+) -> Result<LuaString, anyhow::Error> {
     let path = validate_path(&path)?;
 
     let content = fs::read(path)?;
@@ -68,10 +69,10 @@ fn lua_read_file<'lua>(
     Ok(ctx.create_string(&content).unwrap())
 }
 
-fn lua_read_dir<'lua>(
-    ctx: LuaContext<'lua>,
+fn lua_read_dir(
+    ctx: &Lua,
     path: &str,
-) -> Result<(LuaTable<'lua>, LuaTable<'lua>), anyhow::Error> {
+) -> Result<(LuaTable, LuaTable), anyhow::Error> {
     let path = validate_path(&path)?;
 
     if !path.is_dir() {
@@ -141,10 +142,10 @@ fn lua_absolutize_path(path: &str) -> Result<String, anyhow::Error> {
     Ok(path.absolutize()?.to_str().unwrap().into())
 }
 
-fn lua_watch_file<'lua>(
-    ctx: LuaContext<'lua>,
+fn lua_watch_file(
+    ctx: &Lua,
     path: &str,
-    callback: LuaFunction<'lua>,
+    callback: LuaFunction,
 ) -> Result<bool, anyhow::Error> {
     let callback_registry_key = Arc::new(ctx.create_registry_value(callback)?);
     let path = path.to_string();
@@ -169,7 +170,7 @@ fn lua_watch_file<'lua>(
                                 let callback: LuaFunction =
                                     ctx.registry_value(&callback_registry_key)?;
                                 callback
-                                    .call::<_, ()>(LuaValue::String(ctx.create_string(&data)?))?;
+                                    .call(LuaValue::String(ctx.create_string(&data)?))?;
 
                                 Ok(())
                             })))
@@ -188,7 +189,7 @@ fn lua_watch_file<'lua>(
     Ok(true)
 }
 
-fn get_writefile_luafn(ctx: LuaContext) -> LuaFunction {
+fn get_writefile_luafn(ctx: &Lua) -> LuaFunction {
     ctx.create_function(move |ctx, (path, content): (String, LuaString)| {
         let result = lua_write_file(&path, content).map(|_| true);
 
@@ -197,7 +198,7 @@ fn get_writefile_luafn(ctx: LuaContext) -> LuaFunction {
     .unwrap()
 }
 
-fn get_copyfile_luafn(ctx: LuaContext) -> LuaFunction {
+fn get_copyfile_luafn(ctx: &Lua) -> LuaFunction {
     ctx.create_function(move |ctx, (from, to): (String, String)| {
         let result = lua_copy_file(&from, &to);
 
@@ -206,7 +207,7 @@ fn get_copyfile_luafn(ctx: LuaContext) -> LuaFunction {
     .unwrap()
 }
 
-fn get_readfile_luafn(ctx: LuaContext) -> LuaFunction {
+fn get_readfile_luafn(ctx: &Lua) -> LuaFunction {
     ctx.create_function(|ctx, path: String| {
         let result = lua_read_file(ctx, &path);
 
@@ -215,7 +216,7 @@ fn get_readfile_luafn(ctx: LuaContext) -> LuaFunction {
     .unwrap()
 }
 
-fn get_readdir_luafn(ctx: LuaContext) -> LuaFunction {
+fn get_readdir_luafn(ctx: &Lua) -> LuaFunction {
     ctx.create_function(|ctx, path: String| {
         let result = lua_read_dir(ctx, &path);
 
@@ -224,7 +225,7 @@ fn get_readdir_luafn(ctx: LuaContext) -> LuaFunction {
     .unwrap()
 }
 
-fn get_isdir_luafn(ctx: LuaContext) -> LuaFunction {
+fn get_isdir_luafn(ctx: &Lua) -> LuaFunction {
     ctx.create_function(|_, path: String| {
         let path: PathBuf = path.into();
 
@@ -233,7 +234,7 @@ fn get_isdir_luafn(ctx: LuaContext) -> LuaFunction {
     .unwrap()
 }
 
-fn get_isfile_luafn(ctx: LuaContext) -> LuaFunction {
+fn get_isfile_luafn(ctx: &Lua) -> LuaFunction {
     ctx.create_function(|_, path: String| {
         let path: PathBuf = path.into();
 
@@ -242,7 +243,7 @@ fn get_isfile_luafn(ctx: LuaContext) -> LuaFunction {
     .unwrap()
 }
 
-fn get_exists_luafn(ctx: LuaContext) -> LuaFunction {
+fn get_exists_luafn(ctx: &Lua) -> LuaFunction {
     ctx.create_function(|_, path: String| {
         let path: PathBuf = path.into();
 
@@ -251,7 +252,7 @@ fn get_exists_luafn(ctx: LuaContext) -> LuaFunction {
     .unwrap()
 }
 
-fn get_absolutize_luafn(ctx: LuaContext) -> LuaFunction {
+fn get_absolutize_luafn(ctx: &Lua) -> LuaFunction {
     ctx.create_function(|ctx, path: String| {
         let result = lua_absolutize_path(&path);
 
@@ -260,7 +261,7 @@ fn get_absolutize_luafn(ctx: LuaContext) -> LuaFunction {
     .unwrap()
 }
 
-fn get_copydir_luafn(ctx: LuaContext) -> LuaFunction {
+fn get_copydir_luafn(ctx: &Lua) -> LuaFunction {
     ctx.create_function(|ctx, (from, to): (String, String)| {
         let result = lua_copy_dir(&from, &to);
 
@@ -269,7 +270,7 @@ fn get_copydir_luafn(ctx: LuaContext) -> LuaFunction {
     .unwrap()
 }
 
-fn get_filewatch_luafn(ctx: LuaContext) -> LuaFunction {
+fn get_filewatch_luafn(ctx: &Lua) -> LuaFunction {
     ctx.create_function(|ctx, (target, callback): (String, LuaFunction)| {
         let result = lua_watch_file(ctx, &target, callback);
 
@@ -278,7 +279,7 @@ fn get_filewatch_luafn(ctx: LuaContext) -> LuaFunction {
     .unwrap()
 }
 
-pub fn get_fs_module(ctx: LuaContext) -> LuaTable {
+pub fn get_fs_module(ctx: &Lua) -> LuaTable {
     let table = ctx.create_table().unwrap();
 
     table.set("writeFile", get_writefile_luafn(ctx)).unwrap();

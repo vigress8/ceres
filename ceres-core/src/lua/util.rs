@@ -1,5 +1,5 @@
 use pest::iterators::Pair;
-use rlua::prelude::*;
+use mlua::prelude::*;
 
 use ceres_formats::{ObjectId, ValueType};
 use ceres_formats::metadata::FieldDesc;
@@ -8,10 +8,10 @@ use ceres_parsers::lua;
 
 use crate::error::*;
 
-pub fn evaluate_macro_args<'lua>(
-    ctx: LuaContext<'lua>,
+pub fn evaluate_macro_args(
+    ctx: &Lua,
     args: Pair<lua::Rule>,
-) -> Result<LuaMultiValue<'lua>, LuaError> {
+) -> Result<LuaMultiValue, LuaError> {
     if let Some(inner) = args.into_inner().next() {
         let chunk = ctx.load(inner.as_str());
 
@@ -89,31 +89,31 @@ pub fn ltable_to_str(table: LuaTable) -> String {
     out
 }
 
-pub fn wrap_result<'lua, V>(ctx: LuaContext<'lua>, value: Result<V, anyhow::Error>) -> LuaMultiValue
+pub fn wrap_result<V>(ctx: &Lua, value: Result<V, anyhow::Error>) -> LuaMultiValue
 where
-    V: ToLuaMulti<'lua>,
+    V: IntoLuaMulti,
 {
     match value {
-        Ok(value) => value.to_lua_multi(ctx).unwrap(),
+        Ok(value) => value.into_lua_multi(ctx).unwrap(),
         Err(error) => (
             LuaValue::Boolean(false),
-            error.to_string().to_lua(ctx).unwrap(),
+            error.to_string().into_lua(ctx).unwrap(),
         )
-            .to_lua_multi(ctx)
+            .into_lua_multi(ctx)
             .unwrap(),
     }
 }
 
 pub fn lvalue_to_objid(value: LuaValue) -> Result<ObjectId, LuaError> {
     match value {
-        LuaValue::String(value) => ObjectId::from_bytes(value.as_bytes())
+        LuaValue::String(value) => ObjectId::from_bytes(&value.as_bytes())
             .ok_or_else(|| StringError::new("invalid byte sequence for id").into()),
         LuaValue::Integer(value) => Ok(ObjectId::new(value as u32)),
         _ => Err(StringError::new("cannot coerce type to object id").into()),
     }
 }
 
-pub fn value_to_lvalue<'lua>(ctx: LuaContext<'lua>, value: &Value) -> LuaValue<'lua> {
+pub fn value_to_lvalue(ctx: &Lua, value: &Value) -> LuaValue {
     match value {
         Value::Unreal(value) | Value::Real(value) => LuaValue::Number(*value as LuaNumber),
         Value::Int(value) => LuaValue::Integer(*value as LuaInteger),
@@ -121,9 +121,9 @@ pub fn value_to_lvalue<'lua>(ctx: LuaContext<'lua>, value: &Value) -> LuaValue<'
     }
 }
 
-pub fn lvalue_to_value<'lua>(
-    ctx: LuaContext<'lua>,
-    value: LuaValue<'lua>,
+pub fn lvalue_to_value(
+    ctx: &Lua,
+    value: LuaValue,
     field_meta: &FieldDesc,
 ) -> Result<Value, LuaError> {
     Ok(match field_meta.value_ty {

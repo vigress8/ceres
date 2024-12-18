@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use mpq::Archive;
 use mpq::Creator;
 use mpq::FileOptions;
-use rlua::prelude::*;
+use mlua::prelude::*;
 use walkdir::WalkDir;
 
 use crate::error::ContextError;
@@ -23,9 +23,9 @@ struct Builder {
 }
 
 impl LuaUserData for Viewer {
-    fn add_methods<'lua, T>(methods: &mut T)
+    fn add_methods<T>(methods: &mut T)
     where
-        T: LuaUserDataMethods<'lua, Self>,
+        T: LuaUserDataMethods<Self>,
     {
         methods.add_method_mut("readFile", |ctx, obj, path: LuaString| {
             let result =
@@ -56,9 +56,9 @@ impl LuaUserData for Viewer {
 }
 
 impl LuaUserData for Builder {
-    fn add_methods<'lua, T>(methods: &mut T)
+    fn add_methods<T>(methods: &mut T)
     where
-        T: LuaUserDataMethods<'lua, Self>,
+        T: LuaUserDataMethods<Self>,
     {
         methods.add_method_mut(
             "add",
@@ -113,11 +113,11 @@ fn fileoptions_from_table(table: Option<LuaTable>) -> FileOptions {
     if let Some(table) = table {
         let mut options = FileOptions::default();
 
-        if let Ok(Some(encrypt)) = table.get::<_, Option<bool>>("encrypt") {
+        if let Ok(Some(encrypt)) = table.get::<Option<bool>>("encrypt") {
             options.encrypt = encrypt;
         }
 
-        if let Ok(Some(compress)) = table.get::<_, Option<bool>>("compress") {
+        if let Ok(Some(compress)) = table.get::<Option<bool>>("compress") {
             options.compress = compress;
         }
 
@@ -133,11 +133,11 @@ fn fileoptions_from_table(table: Option<LuaTable>) -> FileOptions {
 
 fn readflow_readfile(archive: &mut FileArchive, path: LuaString) -> Result<Vec<u8>, anyhow::Error> {
     let path = path.to_str()?;
-    Ok(archive.read_file(path)?)
+    Ok(archive.read_file(&path)?)
 }
 
 fn readflow_extract(archive: &mut FileArchive, path: LuaString) -> Result<bool, anyhow::Error> {
-    let path: PathBuf = path.to_str()?.into();
+    let path: PathBuf = path.to_str()?.as_ref().into();
     fs::create_dir_all(path.parent().unwrap())
         .map_err(|cause| ContextError::new("could not create folder for map", cause))?;
 
@@ -190,7 +190,7 @@ fn writeflow_addbuf(
     let path = path.to_str()?;
     let contents = contents.as_bytes();
 
-    builder.creator.add_file(path, contents, options);
+    builder.creator.add_file(&path, contents.as_ref(), options);
 
     Ok(true)
 }
@@ -203,8 +203,8 @@ fn writeflow_addfile(
 ) -> Result<bool, anyhow::Error> {
     let archive_path = archive_path.to_str()?;
     let fs_path = fs_path.to_str()?;
-    let contents = fs::read(fs_path)?;
-    builder.creator.add_file(archive_path, contents, options);
+    let contents = fs::read(fs_path.as_ref())?;
+    builder.creator.add_file(&archive_path, contents, options);
 
     Ok(true)
 }
@@ -214,7 +214,7 @@ fn writeflow_adddir(
     dir_path: LuaString,
     options: FileOptions,
 ) -> Result<bool, anyhow::Error> {
-    let dir_path: PathBuf = dir_path.to_str()?.into();
+    let dir_path: PathBuf = dir_path.to_str()?.as_ref().into();
 
     let entries = WalkDir::new(&dir_path)
         .follow_links(true)
@@ -267,7 +267,7 @@ fn writeflow_addmpq(
 }
 
 fn writeflow_write(builder: &mut Builder, path: LuaString) -> Result<bool, anyhow::Error> {
-    let path: PathBuf = path.to_str()?.into();
+    let path: PathBuf = path.to_str()?.as_ref().into();
 
     fs::create_dir_all(path.parent().unwrap())
         .map_err(|cause| ContextError::new("could not create folder for map", cause))?;
@@ -291,8 +291,8 @@ fn writeflow_new() -> Result<Builder, anyhow::Error> {
     Ok(Builder { creator })
 }
 
-fn get_mpqopen_luafn(ctx: LuaContext) -> LuaFunction {
-    ctx.create_function(|ctx: LuaContext, path: String| {
+fn get_mpqopen_luafn(ctx: &Lua) -> LuaFunction {
+    ctx.create_function(|ctx: &Lua, path: String| {
         let result = readflow_open(&path);
 
         Ok(wrap_result(ctx, result))
@@ -300,8 +300,8 @@ fn get_mpqopen_luafn(ctx: LuaContext) -> LuaFunction {
     .unwrap()
 }
 
-fn get_mpqnew_luafn(ctx: LuaContext) -> LuaFunction {
-    ctx.create_function(|ctx: LuaContext, _: ()| {
+fn get_mpqnew_luafn(ctx: &Lua) -> LuaFunction {
+    ctx.create_function(|ctx: &Lua, _: ()| {
         let result = writeflow_new();
 
         Ok(wrap_result(ctx, result))
@@ -309,7 +309,7 @@ fn get_mpqnew_luafn(ctx: LuaContext) -> LuaFunction {
     .unwrap()
 }
 
-pub fn get_mpq_module(ctx: LuaContext) -> LuaTable {
+pub fn get_mpq_module(ctx: &Lua) -> LuaTable {
     let table = ctx.create_table().unwrap();
 
     table.set("open", get_mpqopen_luafn(ctx)).unwrap();

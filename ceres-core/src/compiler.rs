@@ -8,7 +8,7 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use pest::iterators::Pair;
 use pest::Parser;
-use rlua::prelude::*;
+use mlua::prelude::*;
 use walkdir::WalkDir;
 
 use ceres_parsers::lua;
@@ -88,7 +88,7 @@ pub trait MacroProvider {
 
     fn handle_macro(
         &self,
-        ctx: LuaContext,
+        ctx: &Lua,
         id: &str,
         compilation_data: &mut CompilationData,
         macro_invocation: MacroInvocation,
@@ -116,7 +116,7 @@ pub struct MacroInvocation<'src> {
 }
 
 pub struct ScriptCompiler<'lua, MO: ModuleProvider, MA: MacroProvider> {
-    pub(crate) ctx: LuaContext<'lua>,
+    pub(crate) ctx: &'lua Lua,
 
     map_script: Option<String>,
 
@@ -131,7 +131,7 @@ pub struct ScriptCompiler<'lua, MO: ModuleProvider, MA: MacroProvider> {
 
 impl<'lua, MO: ModuleProvider, MA: MacroProvider> ScriptCompiler<'lua, MO, MA> {
     pub fn new(
-        ctx: LuaContext<'lua>,
+        ctx: &'lua Lua,
         module_provider: MO,
         macro_provider: MA,
     ) -> ScriptCompiler<'lua, MO, MA> {
@@ -359,7 +359,7 @@ impl<'lua, MO: ModuleProvider, MA: MacroProvider> ScriptCompiler<'lua, MO, MA> {
             } else {
                 compilation_data.src += &format!("require(\"{}\")", module_name);
             }
-            self.add_module(module_name, optional)?;
+            self.add_module(&module_name, optional)?;
         } else {
             return Err(MacroInvocationError::message(
                 "Require macro's first argument must be a string".into(),
@@ -387,7 +387,7 @@ impl<'lua, MO: ModuleProvider, MA: MacroProvider> ScriptCompiler<'lua, MO, MA> {
         let arg = args.remove(0);
 
         let value = if let LuaValue::Function(func) = arg {
-            func.call::<_, LuaValue>(())?
+            func.call(())?
         } else {
             arg
         };

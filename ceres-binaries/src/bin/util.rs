@@ -56,13 +56,12 @@ fn serialize_obj<O: Serialize + std::fmt::Debug>(object: O, out_format: &str) {
             bincode::serialize_into(std::io::stdout().lock(), &object).unwrap();
         }
         "ron" => {
-            let pretty_config = ron::ser::PrettyConfig {
-                depth_limit:            10,
-                new_line:               "\n".into(),
-                indentor:               "    ".into(),
-                separate_tuple_members: false,
-                enumerate_arrays:       false,
-            };
+            let pretty_config = ron::ser::PrettyConfig::new()
+                .depth_limit(10)
+                .new_line("\n".into())
+                .indentor("    ".into())
+                .separate_tuple_members(false)
+                .enumerate_arrays(false);
 
             println!(
                 "{}",

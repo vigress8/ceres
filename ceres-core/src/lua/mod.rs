@@ -1,4 +1,4 @@
-use rlua::prelude::*;
+use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::CeresRunMode;
@@ -23,7 +23,7 @@ struct ProjectLayout {
     target_directory: String,
 }
 
-pub fn setup_ceres_environ(ctx: LuaContext, run_mode: CeresRunMode, script_args: Vec<String>) {
+pub fn setup_ceres_environ(ctx: &Lua, run_mode: CeresRunMode, script_args: Vec<String>) {
     const CERES_BUILDSCRIPT_LIB: &str = include_str!("../resource/buildscript_lib.lua");
 
     let globals = ctx.globals();
@@ -72,7 +72,6 @@ pub fn setup_ceres_environ(ctx: LuaContext, run_mode: CeresRunMode, script_args:
 
     ctx.load(CERES_BUILDSCRIPT_LIB)
         .set_name("buildscript_lib.lua")
-        .unwrap()
         .exec()
         .unwrap();
 }

@@ -1,4 +1,4 @@
-use rlua::prelude::*;
+use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use anyhow::anyhow;
@@ -90,13 +90,13 @@ impl From<u32> for ObjectId {
     }
 }
 
-impl<'lua> FromLua<'lua> for ObjectId {
-    fn from_lua(value: LuaValue<'lua>, _ctx: LuaContext<'lua>) -> Result<Self, LuaError> {
+impl FromLua for ObjectId {
+    fn from_lua(value: LuaValue, _ctx: &Lua) -> Result<Self, LuaError> {
         match value {
-            LuaValue::String(value) => ObjectId::from_bytes(value.as_bytes()).ok_or_else(|| {
+            LuaValue::String(value) => ObjectId::from_bytes(&value.as_bytes()).ok_or_else(|| {
                 LuaError::FromLuaConversionError {
                     from:    "string",
-                    to:      "objectid",
+                    to:      "objectid".into(),
                     message: Some("invalid byte sequence for object id".into()),
                 }
             }),
@@ -108,8 +108,8 @@ impl<'lua> FromLua<'lua> for ObjectId {
     }
 }
 
-impl<'lua> ToLua<'lua> for ObjectId {
-    fn to_lua(self, ctx: LuaContext<'lua>) -> Result<LuaValue<'lua>, LuaError> {
+impl IntoLua for ObjectId {
+    fn into_lua(self, ctx: &Lua) -> Result<LuaValue, LuaError> {
         if let Some(value) = self.to_string() {
             Ok(LuaValue::String(ctx.create_string(&value)?))
         } else {
@@ -148,7 +148,7 @@ impl ValueType {
 }
 
 bitflags! {
-    #[derive(Serialize, Deserialize)]
+    #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
     /// Represents a WC3 object type.
     pub struct ObjectKind: u32 {
         const ABILITY = 0x1;

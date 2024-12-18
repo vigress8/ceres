@@ -5,7 +5,8 @@ use std::process::Command;
 use std::thread;
 
 use path_absolutize::Absolutize;
-use rlua::prelude::*;
+use mlua::prelude::*;
+use mlua::ErrorContext;
 
 use crate::error::*;
 use crate::evloop::{get_event_loop_tx, Message};
@@ -73,13 +74,9 @@ fn run_map(map_path: &str, config: LaunchConfig) -> Result<(), anyhow::Error> {
 fn lua_run_map(path: LuaString, config: LuaTable) -> Result<bool, anyhow::Error> {
     let map_path = path.to_str()?;
 
-    let launch_command: String = config
-        .get("command")
-        .context("could not read 'command' field")?;
-    let path_prefix: Option<String> = config
-        .get("prefix")
-        .context("could not read 'prefix' field")?;
-    let args: Option<Vec<String>> = config.get("args").context("could not read 'args' field")?;
+    let launch_command: String = ErrorContext::context(config.get("command"), "could not read 'command' field")?;
+    let path_prefix: Option<String> = ErrorContext::context(config.get("prefix"), "could not read 'prefix' field")?;
+    let args: Option<Vec<String>> = ErrorContext::context(config.get("args"), "could not read 'args' field")?;
 
     let config = LaunchConfig {
         launch_command,
@@ -87,12 +84,12 @@ fn lua_run_map(path: LuaString, config: LuaTable) -> Result<bool, anyhow::Error>
         extra_args: args.unwrap_or_default(),
     };
 
-    run_map(map_path, config)?;
+    run_map(&map_path, config)?;
 
     Ok(true)
 }
 
-pub fn get_runmap_luafn(ctx: LuaContext) -> LuaFunction {
+pub fn get_runmap_luafn(ctx: &Lua) -> LuaFunction {
     ctx.create_function(|ctx, (path, config): (LuaString, LuaTable)| {
         let result = lua_run_map(path, config);
 

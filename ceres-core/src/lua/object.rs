@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use rlua::prelude::*;
+use mlua::prelude::*;
 
 use anyhow::anyhow;
 use atoi::atoi;
@@ -40,18 +40,18 @@ thread_local! {
     static OBJECT_METHODS: RefCell<Option<StaticMethodKeys >> = RefCell::new(None);
 }
 
-struct StaticMethods<'lua> {
-    obj_getfield:       LuaFunction<'lua>,
-    obj_setfield:       LuaFunction<'lua>,
-    obj_clone:          LuaFunction<'lua>,
-    objstore_read:      LuaFunction<'lua>,
-    objstore_write:     LuaFunction<'lua>,
-    objstore_setobject: LuaFunction<'lua>,
-    objstore_getobject: LuaFunction<'lua>,
+struct StaticMethods {
+    obj_getfield:       LuaFunction,
+    obj_setfield:       LuaFunction,
+    obj_clone:          LuaFunction,
+    objstore_read:      LuaFunction,
+    objstore_write:     LuaFunction,
+    objstore_setobject: LuaFunction,
+    objstore_getobject: LuaFunction,
 }
 
-impl<'lua> StaticMethods<'lua> {
-    fn new(ctx: LuaContext<'lua>, keys: &StaticMethodKeys) -> StaticMethods<'lua> {
+impl<'lua> StaticMethods {
+    fn new(ctx: &Lua, keys: &StaticMethodKeys) -> StaticMethods {
         StaticMethods {
             obj_getfield:       ctx.registry_value(&keys.obj_getfield).unwrap(),
             obj_setfield:       ctx.registry_value(&keys.obj_setfield).unwrap(),
@@ -63,9 +63,9 @@ impl<'lua> StaticMethods<'lua> {
         }
     }
 
-    fn with<'a, C, R>(ctx: LuaContext<'a>, callback: C) -> R
+    fn with<C, R>(ctx: &Lua, callback: C) -> R
     where
-        C: FnOnce(LuaContext<'a>, StaticMethods<'a>) -> R,
+        C: FnOnce(&Lua, StaticMethods) -> R,
     {
         OBJECT_METHODS.with(|keys| {
             if keys.borrow().is_none() {
@@ -148,41 +148,41 @@ impl<'lua> StaticMethods<'lua> {
         })
     }
 
-    fn obj_getfield_fn(ctx: LuaContext) -> LuaValue {
+    fn obj_getfield_fn(ctx: &Lua) -> LuaValue {
         Self::with(ctx, |_ctx, methods| {
             LuaValue::Function(methods.obj_getfield)
         })
     }
 
-    fn obj_setfield_fn(ctx: LuaContext) -> LuaValue {
+    fn obj_setfield_fn(ctx: &Lua) -> LuaValue {
         Self::with(ctx, |_ctx, methods| {
             LuaValue::Function(methods.obj_setfield)
         })
     }
 
-    fn obj_clone_fn(ctx: LuaContext) -> LuaValue {
+    fn obj_clone_fn(ctx: &Lua) -> LuaValue {
         Self::with(ctx, |_ctx, methods| LuaValue::Function(methods.obj_clone))
     }
 
-    fn objstore_read_fn(ctx: LuaContext) -> LuaValue {
+    fn objstore_read_fn(ctx: &Lua) -> LuaValue {
         Self::with(ctx, |_ctx, methods| {
             LuaValue::Function(methods.objstore_read)
         })
     }
 
-    fn objstore_write_fn(ctx: LuaContext) -> LuaValue {
+    fn objstore_write_fn(ctx: &Lua) -> LuaValue {
         Self::with(ctx, |_ctx, methods| {
             LuaValue::Function(methods.objstore_write)
         })
     }
 
-    fn objstore_getobject_fn(ctx: LuaContext) -> LuaValue {
+    fn objstore_getobject_fn(ctx: &Lua) -> LuaValue {
         Self::with(ctx, |_ctx, methods| {
             LuaValue::Function(methods.objstore_getobject)
         })
     }
 
-    fn objstore_setobject_fn(ctx: LuaContext) -> LuaValue {
+    fn objstore_setobject_fn(ctx: &Lua) -> LuaValue {
         Self::with(ctx, |_ctx, methods| {
             LuaValue::Function(methods.objstore_setobject)
         })
@@ -194,10 +194,10 @@ struct LuaObjectWrapper {
 }
 
 impl LuaObjectWrapper {
-    fn clone<'lua>(
-        _ctx: LuaContext<'lua>,
-        object: LuaAnyUserData<'lua>,
-    ) -> Result<impl ToLuaMulti<'lua>, LuaError> {
+    fn clone(
+        _ctx: &Lua,
+        object: LuaAnyUserData,
+    ) -> Result<impl IntoLuaMulti, LuaError> {
         let object = object.borrow::<LuaObjectWrapper>()?;
 
         let object = object.inner.borrow();
@@ -211,18 +211,18 @@ impl LuaObjectWrapper {
         })
     }
 
-    fn fields<'lua>(ctx: LuaContext<'lua>, object: &Object) -> Result<LuaValue<'lua>, LuaError> {
+    fn fields(ctx: &Lua, object: &Object) -> Result<LuaValue, LuaError> {
         let fields: Vec<_> = w3data::metadata()
             .query_all_object_fields(&object)
             .map(|field_desc| field_desc.id)
             .collect();
 
-        Ok(fields.to_lua(ctx)?)
+        Ok(fields.into_lua(ctx)?)
     }
 
-    fn translate_field_name<'lua>(
-        ctx: LuaContext<'lua>,
-        key: LuaValue<'lua>,
+    fn translate_field_name(
+        ctx: &Lua,
+        key: LuaValue,
         object: &Object,
     ) -> Result<Option<(&'static FieldDesc, Option<u32>)>, LuaError> {
         if let Ok(id) = LuaInteger::from_lua(key.clone(), ctx) {
@@ -254,15 +254,15 @@ impl LuaObjectWrapper {
             }
         }
 
-        let result = w3data::metadata().query_lua_field(object, key.to_str()?);
+        let result = w3data::metadata().query_lua_field(object, &key.to_str()?);
 
         Ok(result)
     }
 
-    fn get_field<'lua>(
-        ctx: LuaContext<'lua>,
-        (object, key): (&LuaObjectWrapper, LuaValue<'lua>),
-    ) -> Result<impl ToLua<'lua>, LuaError> {
+    fn get_field(
+        ctx: &Lua,
+        (object, key): (&LuaObjectWrapper, LuaValue),
+    ) -> Result<impl IntoLua, LuaError> {
         let object = object.inner.borrow();
 
         if let Some((field_desc, level)) = Self::translate_field_name(ctx, key, &object)? {
@@ -280,10 +280,10 @@ impl LuaObjectWrapper {
         Ok(LuaValue::Nil)
     }
 
-    fn set_field<'lua>(
-        ctx: LuaContext<'lua>,
-        (object, key, value): (&LuaObjectWrapper, LuaValue<'lua>, LuaValue<'lua>),
-    ) -> Result<impl ToLuaMulti<'lua>, LuaError> {
+    fn set_field(
+        ctx: &Lua,
+        (object, key, value): (&LuaObjectWrapper, LuaValue, LuaValue),
+    ) -> Result<impl IntoLuaMulti, LuaError> {
         let object = &mut object.inner.borrow_mut();
 
         if let Some((field_desc, level)) = Self::translate_field_name(ctx, key, object)? {
@@ -310,36 +310,36 @@ impl LuaObjectWrapper {
         )))
     }
 
-    fn index<'lua>(
-        ctx: LuaContext<'lua>,
+    fn index(
+        ctx: &Lua,
         object: &mut LuaObjectWrapper,
-        key: LuaValue<'lua>,
-    ) -> Result<impl ToLua<'lua>, LuaError> {
+        key: LuaValue,
+    ) -> Result<impl IntoLua, LuaError> {
         let object_inner = &object.inner.borrow();
 
         if let Ok(key) = LuaString::from_lua(key.clone(), ctx) {
             let key = key.as_bytes();
 
-            match key {
+            match key.as_ref() {
                 b"all" => return Ok(Self::fields(ctx, &object_inner)?),
                 b"clone" => return Ok(StaticMethods::obj_clone_fn(ctx)),
                 b"setField" => return Ok(StaticMethods::obj_setfield_fn(ctx)),
                 b"getField" => return Ok(StaticMethods::obj_getfield_fn(ctx)),
-                b"id" => return Ok(object_inner.id().to_lua(ctx)?),
-                b"parentId" => return Ok(object_inner.parent_id().to_lua(ctx)?),
-                b"type" => return Ok(object_inner.kind().to_typestr().to_lua(ctx)?),
+                b"id" => return Ok(object_inner.id().into_lua(ctx)?),
+                b"parentId" => return Ok(object_inner.parent_id().into_lua(ctx)?),
+                b"type" => return Ok(object_inner.kind().to_typestr().into_lua(ctx)?),
                 _ => {}
             }
         }
 
-        Ok(Self::get_field(ctx, (object, key))?.to_lua(ctx)?)
+        Ok(Self::get_field(ctx, (object, key))?.into_lua(ctx)?)
     }
 
-    fn newindex<'lua>(
-        ctx: LuaContext<'lua>,
+    fn newindex(
+        ctx: &Lua,
         object: &mut LuaObjectWrapper,
-        (key, value): (LuaValue<'lua>, LuaValue<'lua>),
-    ) -> Result<impl ToLuaMulti<'lua>, LuaError> {
+        (key, value): (LuaValue, LuaValue),
+    ) -> Result<impl IntoLuaMulti, LuaError> {
         Self::set_field(ctx, (object, key, value))
     }
 }
@@ -350,25 +350,25 @@ struct LuaObjectStoreWrapper {
 }
 
 impl LuaObjectStoreWrapper {
-    fn read<'lua>(
-        ctx: LuaContext<'lua>,
-        (data, value): (LuaAnyUserData<'lua>, LuaValue<'lua>),
-    ) -> Result<LuaValue<'lua>, LuaError> {
+    fn read(
+        ctx: &Lua,
+        (data, value): (LuaAnyUserData, LuaValue),
+    ) -> Result<LuaValue, LuaError> {
         let mut data = data.borrow_mut::<LuaObjectStoreWrapper>()?;
         let kind = data.kind;
         let mut data = &mut data.inner;
         let value = LuaString::from_lua(value, ctx)?;
 
-        w3obj::read::read_object_file(value.as_bytes(), data, kind).map_err(LuaError::external)?;
+        w3obj::read::read_object_file(&value.as_bytes(), data, kind).map_err(LuaError::external)?;
         data.reset_dirty();
 
         Ok(LuaValue::Nil)
     }
 
-    fn write<'lua>(
-        ctx: LuaContext<'lua>,
-        data: LuaAnyUserData<'lua>,
-    ) -> Result<LuaValue<'lua>, LuaError> {
+    fn write(
+        ctx: &Lua,
+        data: LuaAnyUserData,
+    ) -> Result<LuaValue, LuaError> {
         let data = data.borrow::<LuaObjectStoreWrapper>()?;
         let kind = data.kind;
         let data = &data.inner;
@@ -398,11 +398,11 @@ impl LuaObjectStoreWrapper {
         })
     }
 
-    fn objects<'lua>(
-        ctx: LuaContext<'lua>,
+    fn objects(
+        ctx: &Lua,
         data: &mut ObjectStore,
         kind: ObjectKind,
-    ) -> Result<LuaValue<'lua>, LuaError> {
+    ) -> Result<LuaValue, LuaError> {
         let table = ctx.create_table()?;
         let mut set: HashSet<ObjectId> = HashSet::new();
 
@@ -423,26 +423,26 @@ impl LuaObjectStoreWrapper {
         Ok(LuaValue::Table(table))
     }
 
-    fn get_object<'lua>(
-        ctx: LuaContext<'lua>,
-        (data, key): (&mut LuaObjectStoreWrapper, LuaValue<'lua>),
-    ) -> Result<LuaValue<'lua>, LuaError> {
+    fn get_object(
+        ctx: &Lua,
+        (data, key): (&mut LuaObjectStoreWrapper, LuaValue),
+    ) -> Result<LuaValue, LuaError> {
         let kind = data.kind;
         let data = &mut data.inner;
 
         if let Ok(id) = ObjectId::from_lua(key, ctx) {
             return Self::object_or_new(data, kind, id)
                 .map(|object| LuaObjectWrapper { inner: object })
-                .to_lua(ctx);
+                .into_lua(ctx);
         }
 
         Ok(LuaValue::Nil)
     }
 
-    fn set_object<'lua>(
-        ctx: LuaContext<'lua>,
-        (data, key, value): (&mut LuaObjectStoreWrapper, LuaValue<'lua>, LuaValue<'lua>),
-    ) -> Result<LuaValue<'lua>, LuaError> {
+    fn set_object(
+        ctx: &Lua,
+        (data, key, value): (&mut LuaObjectStoreWrapper, LuaValue, LuaValue),
+    ) -> Result<LuaValue, LuaError> {
         let data = &mut data.inner;
 
         if let Ok(id) = ObjectId::from_lua(key.clone(), ctx) {
@@ -483,26 +483,26 @@ impl LuaObjectStoreWrapper {
         }
     }
 
-    fn index<'lua>(
-        ctx: LuaContext<'lua>,
+    fn index(
+        ctx: &Lua,
         data: &mut LuaObjectStoreWrapper,
-        key: LuaValue<'lua>,
-    ) -> Result<LuaValue<'lua>, LuaError> {
+        key: LuaValue,
+    ) -> Result<LuaValue, LuaError> {
         let kind = data.kind;
         let data_inner = &mut data.inner;
 
         if let Ok(key) = LuaString::from_lua(key.clone(), ctx) {
             let key = key.as_bytes();
 
-            match key {
+            match key.as_ref() {
                 b"all" => return Self::objects(ctx, data_inner, kind),
                 b"readFromString" => return Ok(StaticMethods::objstore_read_fn(ctx)),
                 b"writeToString" => return Ok(StaticMethods::objstore_write_fn(ctx)),
                 b"getObject" => return Ok(StaticMethods::objstore_getobject_fn(ctx)),
                 b"setObject" => return Ok(StaticMethods::objstore_setobject_fn(ctx)),
-                b"ext" => return Ok(kind.to_ext().to_lua(ctx)?),
-                b"typestr" => return Ok(kind.to_typestr().to_lua(ctx)?),
-                b"isDirty" => return Ok(data_inner.is_dirty().to_lua(ctx)?),
+                b"ext" => return Ok(kind.to_ext().into_lua(ctx)?),
+                b"typestr" => return Ok(kind.to_typestr().into_lua(ctx)?),
+                b"isDirty" => return Ok(data_inner.is_dirty().into_lua(ctx)?),
                 _ => {}
             }
         }
@@ -510,19 +510,19 @@ impl LuaObjectStoreWrapper {
         Self::get_object(ctx, (data, key))
     }
 
-    fn newindex<'lua>(
-        ctx: LuaContext<'lua>,
+    fn newindex(
+        ctx: &Lua,
         data: &mut LuaObjectStoreWrapper,
-        (key, value): (LuaValue<'lua>, LuaValue<'lua>),
-    ) -> Result<LuaValue<'lua>, LuaError> {
+        (key, value): (LuaValue, LuaValue),
+    ) -> Result<LuaValue, LuaError> {
         Self::set_object(ctx, (data, key, value))
     }
 }
 
 impl LuaUserData for LuaObjectWrapper {
-    fn add_methods<'lua, T>(methods: &mut T)
+    fn add_methods<T>(methods: &mut T)
     where
-        T: LuaUserDataMethods<'lua, Self>,
+        T: LuaUserDataMethods<Self>,
     {
         methods.add_meta_method_mut(LuaMetaMethod::Index, LuaObjectWrapper::index);
         methods.add_meta_method_mut(LuaMetaMethod::NewIndex, LuaObjectWrapper::newindex);
@@ -530,9 +530,9 @@ impl LuaUserData for LuaObjectWrapper {
 }
 
 impl LuaUserData for LuaObjectStoreWrapper {
-    fn add_methods<'lua, T>(methods: &mut T)
+    fn add_methods<T>(methods: &mut T)
     where
-        T: LuaUserDataMethods<'lua, Self>,
+        T: LuaUserDataMethods<Self>,
     {
         methods.add_meta_method_mut(LuaMetaMethod::Index, LuaObjectStoreWrapper::index);
         methods.add_meta_method_mut(LuaMetaMethod::NewIndex, LuaObjectStoreWrapper::newindex);
@@ -552,10 +552,10 @@ fn open_store_from_str(
     Ok(LuaObjectStoreWrapper { inner: data, kind })
 }
 
-fn get_open_store_from_str_luafn(ctx: LuaContext) -> LuaFunction {
-    ctx.create_function(|_ctx: LuaContext, (data, ext): (LuaString, LuaString)| {
+fn get_open_store_from_str_luafn(ctx: &Lua) -> LuaFunction {
+    ctx.create_function(|_ctx: &Lua, (data, ext): (LuaString, LuaString)| {
         let data = data.as_bytes();
-        let kind = ObjectKind::from_ext(ext.to_str()?);
+        let kind = ObjectKind::from_ext(&ext.to_str()?);
 
         if kind == ObjectKind::empty() {
             return Err(StringError::new(format!(
@@ -565,16 +565,16 @@ fn get_open_store_from_str_luafn(ctx: LuaContext) -> LuaFunction {
             .into());
         }
 
-        let result = open_store_from_str(data, kind).map_err(LuaError::external)?;
+        let result = open_store_from_str(&data, kind).map_err(LuaError::external)?;
 
         Ok(result)
     })
     .unwrap()
 }
 
-fn get_open_store_blank_luafn(ctx: LuaContext) -> LuaFunction {
-    ctx.create_function(|_ctx: LuaContext, ext: LuaString| {
-        let kind = ObjectKind::from_ext(ext.to_str()?);
+fn get_open_store_blank_luafn(ctx: &Lua) -> LuaFunction {
+    ctx.create_function(|_ctx: &Lua, ext: LuaString| {
+        let kind = ObjectKind::from_ext(&ext.to_str()?);
 
         if kind == ObjectKind::empty() {
             return Err(StringError::new(format!(
@@ -592,7 +592,7 @@ fn get_open_store_blank_luafn(ctx: LuaContext) -> LuaFunction {
     .unwrap()
 }
 
-pub fn get_object_module(ctx: LuaContext) -> LuaTable {
+pub fn get_object_module(ctx: &Lua) -> LuaTable {
     let table = ctx.create_table().unwrap();
 
     table

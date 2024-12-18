@@ -6,21 +6,21 @@ edition = "2018"
 [dependencies]
 
 # util
-lazy_static = "1.4.0"
-atoi = "0.3.2"
-indexmap = "1.3.2"
-slotmap = { version = "0.4.0", features = ["serde"] }
-num-traits = "0.2.11"
-bitflags = "1.2.1"
+lazy_static = "1.5.0"
+atoi = "2.0.0"
+indexmap = "2.7.0"
+slotmap = { version = "1.0.7", features = ["serde"] }
+num-traits = "0.2.19"
+bitflags = "2.6.0"
 
 # parsing/casting
-byteorder = "1.3.4"
-byte-slice-cast = "0.3.5"
-serde = { version = "1.0.104", features = ["derive", "rc"] }
+byteorder = "1.5.0"
+byte-slice-cast = "1.2.2"
+serde = { version = "1.0.216", features = ["derive", "rc"] }
 
 # lua
-rlua = "0.16.3"
+mlua = { version = "0.10.2", features = ["lua51", "vendored", "error-send"] }
 
 # error handling
-thiserror = "1.0.11"
-anyhow = "1.0.26"
+thiserror = "2.0.8"
+anyhow = "1.0.94"

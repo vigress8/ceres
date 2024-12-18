@@ -8,7 +8,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use rlua::prelude::*;
+use mlua::prelude::*;
 
 use crate::error::ContextError;
 use crate::evloop::wait_on_evloop;
@@ -58,23 +58,19 @@ pub fn execute_script<F>(
     action: F,
 ) -> Result<(), anyhow::Error>
 where
-    F: FnOnce(LuaContext) -> Result<(), anyhow::Error>,
+    F: FnOnce(&Lua) -> Result<(), anyhow::Error>,
 {
     const DEFAULT_BUILD_SCRIPT: &str = include_str!("resource/buildscript_default.lua");
 
     let lua = Rc::new(Lua::new());
 
-    let result: Result<(), anyhow::Error> = lua.context(|ctx| {
-        lua::setup_ceres_environ(
-            ctx,
-            run_mode,
-            script_args.into_iter().map(|s| s.into()).collect(),
-        );
+    lua::setup_ceres_environ(
+        &lua,
+        run_mode,
+        script_args.into_iter().map(|s| s.into()).collect(),
+    );
 
-        action(ctx)?;
-
-        Ok(())
-    });
+    let result: Result<(), anyhow::Error> = action(&lua);
 
     if result.is_err() {
         handle_lua_result(result);
@@ -108,13 +104,11 @@ pub fn run_build_script(
         if let Some(build_script) = build_script {
             ctx.load(&build_script)
                 .set_name("custom build script")
-                .unwrap()
                 .exec()?;
         }
 
         ctx.load(DEFAULT_BUILD_SCRIPT)
             .set_name("buildscript_default.lua")
-            .unwrap()
             .exec()?;
 
         Ok(())

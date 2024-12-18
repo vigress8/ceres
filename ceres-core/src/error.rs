@@ -3,7 +3,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use pest::error::Error as PestError;
-use rlua::prelude::LuaError;
+use mlua::prelude::LuaError;
 use thiserror::Error;
 
 use ceres_parsers::lua;

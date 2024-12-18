@@ -4,7 +4,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::thread_local;
 
-use rlua::prelude::*;
+use mlua::prelude::*;
 
 use compiler::MacroProvider;
 
@@ -17,7 +17,7 @@ pub struct LuaMacroProvider {
 }
 
 impl LuaMacroProvider {
-    fn register_macro<'lua>(&self, ctx: LuaContext<'lua>, id: &str, func: LuaFunction<'lua>) {
+    fn register_macro(&self, ctx: &Lua, id: &str, func: LuaFunction) {
         let registry_key = ctx.create_registry_value(func).unwrap();
 
         self.registered_macros
@@ -33,7 +33,7 @@ impl MacroProvider for LuaMacroProvider {
 
     fn handle_macro(
         &self,
-        ctx: LuaContext,
+        ctx: &Lua,
         id: &str,
         compilation_data: &mut compiler::CompilationData,
         macro_invocation: compiler::MacroInvocation,
@@ -46,10 +46,10 @@ impl MacroProvider for LuaMacroProvider {
             ctx.registry_value(registry_key).unwrap()
         };
 
-        let value = callback.call::<_, LuaValue>(args).unwrap();
+        let value = callback.call(args).unwrap();
 
         if let LuaValue::String(value) = value {
-            compilation_data.src += value.to_str().unwrap();
+            compilation_data.src += &value.to_str().unwrap();
         }
 
         Ok(())
@@ -63,7 +63,7 @@ impl MacroProvider for Rc<LuaMacroProvider> {
 
     fn handle_macro(
         &self,
-        ctx: LuaContext,
+        ctx: &Lua,
         id: &str,
         compilation_data: &mut compiler::CompilationData,
         macro_invocation: compiler::MacroInvocation,
@@ -92,8 +92,8 @@ pub fn get_threadlocal_macro_provider() -> Rc<LuaMacroProvider> {
     })
 }
 
-pub fn get_register_luafn(ctx: LuaContext) -> LuaFunction {
-    ctx.create_function::<_, (), _>(|ctx, (id, callback): (String, LuaFunction)| {
+pub fn get_register_luafn(ctx: &Lua) -> LuaFunction {
+    ctx.create_function(|ctx, (id, callback): (String, LuaFunction)| {
         let lua_macro_provider = get_threadlocal_macro_provider();
 
         lua_macro_provider.register_macro(ctx, &id, callback);
