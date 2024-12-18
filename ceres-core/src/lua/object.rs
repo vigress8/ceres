@@ -21,8 +21,8 @@ where
 {
     field_getter(object).or_else(|| {
         w3data::data()
-            .object_prototype(&object)
-            .and_then(|proto| field_getter(proto))
+            .object_prototype(object)
+            .and_then(field_getter)
     })
 }
 
@@ -37,7 +37,7 @@ struct StaticMethodKeys {
 }
 
 thread_local! {
-    static OBJECT_METHODS: RefCell<Option<StaticMethodKeys >> = RefCell::new(None);
+    static OBJECT_METHODS: RefCell<Option<StaticMethodKeys >> = const { RefCell::new(None) };
 }
 
 struct StaticMethods {
@@ -213,11 +213,11 @@ impl LuaObjectWrapper {
 
     fn fields(ctx: &Lua, object: &Object) -> Result<LuaValue, LuaError> {
         let fields: Vec<_> = w3data::metadata()
-            .query_all_object_fields(&object)
+            .query_all_object_fields(object)
             .map(|field_desc| field_desc.id)
             .collect();
 
-        Ok(fields.into_lua(ctx)?)
+        fields.into_lua(ctx)
     }
 
     fn translate_field_name(
@@ -321,18 +321,18 @@ impl LuaObjectWrapper {
             let key = key.as_bytes();
 
             match key.as_ref() {
-                b"all" => return Ok(Self::fields(ctx, &object_inner)?),
+                b"all" => return Self::fields(ctx, object_inner),
                 b"clone" => return Ok(StaticMethods::obj_clone_fn(ctx)),
                 b"setField" => return Ok(StaticMethods::obj_setfield_fn(ctx)),
                 b"getField" => return Ok(StaticMethods::obj_getfield_fn(ctx)),
-                b"id" => return Ok(object_inner.id().into_lua(ctx)?),
-                b"parentId" => return Ok(object_inner.parent_id().into_lua(ctx)?),
-                b"type" => return Ok(object_inner.kind().to_typestr().into_lua(ctx)?),
+                b"id" => return object_inner.id().into_lua(ctx),
+                b"parentId" => return object_inner.parent_id().into_lua(ctx),
+                b"type" => return object_inner.kind().to_typestr().into_lua(ctx),
                 _ => {}
             }
         }
 
-        Ok(Self::get_field(ctx, (object, key))?.into_lua(ctx)?)
+        Self::get_field(ctx, (object, key))?.into_lua(ctx)
     }
 
     fn newindex(
@@ -356,7 +356,7 @@ impl LuaObjectStoreWrapper {
     ) -> Result<LuaValue, LuaError> {
         let mut data = data.borrow_mut::<LuaObjectStoreWrapper>()?;
         let kind = data.kind;
-        let mut data = &mut data.inner;
+        let data = &mut data.inner;
         let value = LuaString::from_lua(value, ctx)?;
 
         w3obj::read::read_object_file(&value.as_bytes(), data, kind).map_err(LuaError::external)?;
@@ -374,7 +374,7 @@ impl LuaObjectStoreWrapper {
         let data = &data.inner;
 
         let mut buf = Vec::new();
-        w3obj::write::write_object_file(&mut buf, w3data::metadata(), &data, kind)
+        w3obj::write::write_object_file(&mut buf, w3data::metadata(), data, kind)
             .map_err(LuaError::external)?;
 
         Ok(LuaValue::String(ctx.create_string(&buf)?))
@@ -385,7 +385,7 @@ impl LuaObjectStoreWrapper {
         kind: ObjectKind,
         id: ObjectId,
     ) -> Option<Rc<RefCell<Object>>> {
-        data.object(id).map(|object| Rc::clone(object)).or_else(|| {
+        data.object(id).map(Rc::clone).or_else(|| {
             w3data::data()
                 .object(id)
                 .filter(|object| kind.contains(object.kind()))
@@ -500,9 +500,9 @@ impl LuaObjectStoreWrapper {
                 b"writeToString" => return Ok(StaticMethods::objstore_write_fn(ctx)),
                 b"getObject" => return Ok(StaticMethods::objstore_getobject_fn(ctx)),
                 b"setObject" => return Ok(StaticMethods::objstore_setobject_fn(ctx)),
-                b"ext" => return Ok(kind.to_ext().into_lua(ctx)?),
-                b"typestr" => return Ok(kind.to_typestr().into_lua(ctx)?),
-                b"isDirty" => return Ok(data_inner.is_dirty().into_lua(ctx)?),
+                b"ext" => return kind.to_ext().into_lua(ctx),
+                b"typestr" => return kind.to_typestr().into_lua(ctx),
+                b"isDirty" => return data_inner.is_dirty().into_lua(ctx),
                 _ => {}
             }
         }

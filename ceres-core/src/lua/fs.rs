@@ -40,7 +40,7 @@ fn validate_path(path: &str) -> Result<PathBuf, LuaFileError> {
 }
 
 fn lua_write_file(path: &str, content: LuaString) -> Result<(), anyhow::Error> {
-    let path = validate_path(&path)?;
+    let path = validate_path(path)?;
 
     fs::create_dir_all(path.parent().ok_or(LuaFileError::InvalidPath)?)?;
     fs::write(path, content.as_bytes())?;
@@ -49,7 +49,7 @@ fn lua_write_file(path: &str, content: LuaString) -> Result<(), anyhow::Error> {
 }
 
 fn lua_copy_file(from: &str, to: &str) -> Result<(), anyhow::Error> {
-    let from = validate_path(&from)?;
+    let from = validate_path(from)?;
     let to = validate_path(to)?;
 
     fs::create_dir_all(to.parent().ok_or(LuaFileError::InvalidPath)?)?;
@@ -62,7 +62,7 @@ fn lua_read_file(
     ctx: &Lua,
     path: &str,
 ) -> Result<LuaString, anyhow::Error> {
-    let path = validate_path(&path)?;
+    let path = validate_path(path)?;
 
     let content = fs::read(path)?;
 
@@ -73,7 +73,7 @@ fn lua_read_dir(
     ctx: &Lua,
     path: &str,
 ) -> Result<(LuaTable, LuaTable), anyhow::Error> {
-    let path = validate_path(&path)?;
+    let path = validate_path(path)?;
 
     if !path.is_dir() {
         return Err(LuaFileError::NotADir.into());
@@ -122,7 +122,7 @@ fn lua_copy_dir(from: &str, to: &str) -> Result<bool, anyhow::Error> {
                 to.display(),
                 error
             );
-        } else if let Err(error) = fs::copy(&from, &to) {
+        } else if let Err(error) = fs::copy(from, &to) {
             eprintln!(
                 "fs.copyDir(): error copying [{} -> {}]: {}",
                 from.display(),

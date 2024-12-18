@@ -128,7 +128,7 @@ pub mod write {
             let iter: Box<dyn Iterator<Item = FlatFieldItem>> = match &field.kind {
                 FieldKind::Simple { value } => Box::new(std::iter::once((*id, 0, 0, value))),
                 FieldKind::Leveled { values } => {
-                    if let Some(field_desc) = metadata.field_by_id((*id).clone()) {
+                    if let Some(field_desc) = metadata.field_by_id(*id) {
                         Box::new(values.iter().map(move |value| {
                             (
                                 *id,

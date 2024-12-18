@@ -54,7 +54,7 @@ fn run_build(arg: &clap::ArgMatches, mode: ceres_core::CeresRunMode) -> Result<(
     let script_args = arg
         .values_of("BUILD_ARGS")
         .map(std::iter::Iterator::collect)
-        .unwrap_or_else(Vec::new);
+        .unwrap_or_default();
 
     ceres_core::run_build_script(mode, project_dir, script_args)?;
 
@@ -72,7 +72,7 @@ fn exec(arg: &clap::ArgMatches) -> Result<(), anyhow::Error> {
     let script_args = arg
         .values_of("BUILD_ARGS")
         .map(std::iter::Iterator::collect)
-        .unwrap_or_else(Vec::new);
+        .unwrap_or_default();
 
     ceres_core::execute_script(ceres_core::CeresRunMode::Build, script_args, |ctx| {
         ctx.load(&script).exec()?;

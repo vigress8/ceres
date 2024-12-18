@@ -73,7 +73,7 @@ impl MacroProvider for Rc<LuaMacroProvider> {
 }
 
 thread_local! {
-    static LUA_MACRO_PROVIDER: RefCell<Option<Rc<LuaMacroProvider>>> = RefCell::new(None);
+    static LUA_MACRO_PROVIDER: RefCell<Option<Rc<LuaMacroProvider>>> = const { RefCell::new(None) };
 }
 
 pub fn get_threadlocal_macro_provider() -> Rc<LuaMacroProvider> {

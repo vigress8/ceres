@@ -40,7 +40,7 @@ impl ProjectModuleProvider {
 
     pub fn scan(&mut self) {
         for dir in &self.directories {
-            Self::scan_dir(&mut self.known_modules, &dir);
+            Self::scan_dir(&mut self.known_modules, dir);
         }
     }
 
@@ -176,7 +176,7 @@ impl<'lua, MO: ModuleProvider, MA: MacroProvider> ScriptCompiler<'lua, MO, MA> {
             out += &module_header_comment;
             out += &module_header;
             out += &module_source;
-            out += &module_footer;
+            out += module_footer;
             out += &module_footer_comment;
         }
 

@@ -207,7 +207,7 @@ impl Object {
         name: &str,
         metadata: &MetadataStore,
     ) -> Option<()> {
-        let (field_meta, level) = metadata.query_slk_field(name, &self)?;
+        let (field_meta, level) = metadata.query_slk_field(name, self)?;
 
         let value = Value::from_str_and_ty(value.as_inner()?, field_meta.value_ty)?;
         let field_id = field_meta.id;
@@ -231,7 +231,7 @@ impl Object {
         index: i8,
         metadata: &MetadataStore,
     ) -> Option<()> {
-        let (field_meta, level) = metadata.query_profile_field(key, &self, index)?;
+        let (field_meta, level) = metadata.query_profile_field(key, self, index)?;
         let value = Value::from_str_and_ty(value, field_meta.value_ty)?;
 
         if let Some(level) = level {

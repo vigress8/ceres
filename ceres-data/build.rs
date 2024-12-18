@@ -15,6 +15,7 @@ fn main() {
 
     let mut file = fs::OpenOptions::new()
         .create(true)
+        .truncate(true)
         .write(true)
         .open(out_dir.join("data.bin"))
         .unwrap();

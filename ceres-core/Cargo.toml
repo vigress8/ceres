@@ -2,7 +2,7 @@
 name = "ceres-core"
 version = "0.1.0-INTERNAL"
 authors = ["mori"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 pest = "2.7.15"

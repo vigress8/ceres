@@ -14,30 +14,18 @@ use crate::parser::profile;
 use crate::parser::slk;
 
 #[derive(Debug, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ObjectStore {
     objects: BTreeMap<ObjectId, Rc<RefCell<Object>>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ObjectStoreStock {
     objects: BTreeMap<ObjectId, Object>,
 }
 
-impl Default for ObjectStore {
-    fn default() -> ObjectStore {
-        ObjectStore {
-            objects: Default::default(),
-        }
-    }
-}
 
-impl Default for ObjectStoreStock {
-    fn default() -> ObjectStoreStock {
-        ObjectStoreStock {
-            objects: Default::default(),
-        }
-    }
-}
 
 impl ObjectStore {
     pub fn is_dirty(&self) -> bool {
@@ -77,7 +65,7 @@ impl ObjectStore {
 
     pub fn add_from(&mut self, other: &ObjectStore) {
         for (id, other_object) in &other.objects {
-            if let Some(object) = self.objects.get_mut(&id) {
+            if let Some(object) = self.objects.get_mut(id) {
                 object.borrow_mut().add_from(&other_object.borrow());
             } else {
                 let cloned = other_object.borrow().clone();
@@ -94,8 +82,7 @@ impl ObjectStore {
         metadata: &MetadataStore,
     ) -> Option<()> {
         let id = row
-            .cells
-            .get(0)
+            .cells.first()
             .and_then(|c| c.value().as_str())
             .and_then(|id| ObjectId::from_bytes(id.as_bytes()))?;
 
@@ -110,7 +97,7 @@ impl ObjectStore {
         for (value, name) in row
             .cells
             .iter()
-            .filter_map(|cell| legend.name_by_cell(&cell).map(|name| (cell.value(), name)))
+            .filter_map(|cell| legend.name_by_cell(cell).map(|name| (cell.value(), name)))
         {
             object.borrow_mut().process_slk_field(value, name, metadata);
         }
@@ -214,7 +201,7 @@ pub fn read_data_dir<P: AsRef<Path>>(path: P, metadata: &MetadataStore) -> Objec
     ];
 
     for (kind, file_path) in SLKS {
-        read_slk_file(path.join(file_path), *kind, &metadata, &mut data);
+        read_slk_file(path.join(file_path), *kind, metadata, &mut data);
     }
 
     const PROFILES: &[&str] = &[
@@ -268,7 +255,7 @@ pub fn read_data_dir<P: AsRef<Path>>(path: P, metadata: &MetadataStore) -> Objec
     ];
 
     for file_path in PROFILES {
-        read_func_file(path.join(file_path), &metadata, &mut data);
+        read_func_file(path.join(file_path), metadata, &mut data);
     }
 
     data

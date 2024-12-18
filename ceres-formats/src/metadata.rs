@@ -27,11 +27,11 @@ struct BasicInfo {
 }
 
 fn read_basic_info<'src>(row: &slk::Row<'src>, legend: &slk::Legend<'src>) -> BasicInfo {
-    let field_id = read_row_str(&row, legend, "ID").unwrap();
-    let field_name: String = read_row_str(&row, legend, "field").unwrap().into();
-    let value_ty: String = read_row_str(&row, legend, "type").unwrap().into();
-    let index: i8 = read_row_num(&row, legend, "index").unwrap_or(-1);
-    let slk = read_row_str(&row, legend, "slk").unwrap();
+    let field_id = read_row_str(row, legend, "ID").unwrap();
+    let field_name: String = read_row_str(row, legend, "field").unwrap().into();
+    let value_ty: String = read_row_str(row, legend, "type").unwrap().into();
+    let index: i8 = read_row_num(row, legend, "index").unwrap_or(-1);
+    let slk = read_row_str(row, legend, "slk").unwrap();
 
     let field_id = ObjectId::from_bytes(field_id.as_bytes()).unwrap();
 
@@ -73,25 +73,15 @@ impl FieldVariant {
     }
 
     pub fn is_normal(&self) -> bool {
-        match self {
-            FieldVariant::Normal { .. } => true,
-            _ => false,
-        }
+        matches!(self, FieldVariant::Normal { .. })
     }
 
     pub fn is_leveled(&self) -> bool {
-        match self {
-            FieldVariant::Leveled { .. } => true,
-            FieldVariant::Data { .. } => true,
-            _ => false,
-        }
+        matches!(self, FieldVariant::Leveled { .. } | FieldVariant::Data { .. })
     }
 
     pub fn is_data(&self) -> bool {
-        match self {
-            FieldVariant::Data { .. } => true,
-            _ => false,
-        }
+        matches!(self, FieldVariant::Data { .. })
     }
 
     pub fn data_id(&self) -> Option<u8> {
@@ -104,7 +94,7 @@ impl FieldVariant {
 
 fn split_by_digits(input: &str) -> Option<(&str, &str)> {
     input
-        .find(|c: char| c.is_digit(10))
+        .find(|c: char| c.is_ascii_digit())
         .map(|i| (&input[0..i], &input[i..input.len()]))
 }
 
@@ -156,7 +146,7 @@ impl MetadataStore {
         legend: &slk::Legend<'src>,
         kind: ObjectKind,
     ) {
-        let basic_info = read_basic_info(&row, &legend);
+        let basic_info = read_basic_info(&row, legend);
 
         let repeat = read_row_num::<u8>(&row, legend, "repeat");
         let mut leveled = false;
@@ -187,7 +177,7 @@ impl MetadataStore {
     }
 
     fn insert_unit_row<'src>(&mut self, row: slk::Row<'src>, legend: &slk::Legend<'src>) {
-        let basic_info = read_basic_info(&row, &legend);
+        let basic_info = read_basic_info(&row, legend);
 
         let use_unit: u8 = read_row_num(&row, legend, "useUnit").unwrap_or(0);
         let use_bld: u8 = read_row_num(&row, legend, "useBuilding").unwrap_or(0);
@@ -220,7 +210,7 @@ impl MetadataStore {
     }
 
     fn insert_ability_row<'src>(&mut self, row: slk::Row<'src>, legend: &slk::Legend<'src>) {
-        let basic_info = read_basic_info(&row, &legend);
+        let basic_info = read_basic_info(&row, legend);
 
         let repeat = read_row_num::<u8>(&row, legend, "repeat");
         let data_id = read_row_num::<u8>(&row, legend, "data");
@@ -316,12 +306,12 @@ impl MetadataStore {
     ) -> Option<(&FieldDesc, Option<u32>)> {
         let object_kind = object.kind();
         let object_id = object.id();
-        self.find_named_field(&field_name, |f| {
+        self.find_named_field(field_name, |f| {
             !f.is_profile && f.kind.contains(object_kind)
         })
         .map(|f| (f, None))
         .or_else(|| {
-            split_by_digits(&field_name).and_then(|(name, raw_level)| {
+            split_by_digits(field_name).and_then(|(name, raw_level)| {
                 let level: u32 = raw_level.parse().unwrap();
 
                 let field = if name.starts_with("Data") {
@@ -347,7 +337,7 @@ impl MetadataStore {
     ) -> Option<(&FieldDesc, Option<u32>)> {
         let object_kind = object.kind();
 
-        self.find_named_field(&field_name, |f| {
+        self.find_named_field(field_name, |f| {
             f.is_profile
                 && f.kind.contains(object_kind)
                 && ((f.variant.is_normal() && (f.index == index || f.index == -1))
@@ -360,7 +350,7 @@ impl MetadataStore {
                 (f, None)
             }
         })
-        .or_else(|| None)
+        .or(None)
     }
 
     pub fn query_object_field(&self, field_id: ObjectId, object: &Object) -> Option<&FieldDesc> {
@@ -421,7 +411,7 @@ impl MetadataStore {
                         .expect("field must not have leading non-numeric characters after digits"),
                 )
             })
-            .or_else(|| Some((name, 0)))
+            .or(Some((name, 0)))
             .and_then(|(name, index)| self.query_profile_field(name, object, index))
             .or_else(|| self.query_slk_field(name, object))
     }
@@ -486,7 +476,7 @@ pub fn read_metadata_dir<P: AsRef<Path>>(path: P) -> MetadataStore {
 
 fn read_metadata_file<C, P>(path: P, mut callback: C)
 where
-    C: FnMut(slk::Row, &slk::Legend) -> (),
+    C: FnMut(slk::Row, &slk::Legend),
     P: AsRef<Path>,
 {
     let src = fs::read(path).unwrap();

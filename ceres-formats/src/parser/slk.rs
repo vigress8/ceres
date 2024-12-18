@@ -15,7 +15,7 @@ fn strip_field(src: &[u8]) -> (&[u8], &[u8]) {
     }
 
     if i == src.len() {
-        (&src[..], &[])
+        (src, &[])
     } else {
         (&src[0..i], &src[i + 1..src.len()])
     }
@@ -163,7 +163,7 @@ impl<'src> Parser<'src> {
     }
 
     pub fn next_record(&mut self) -> Option<Cell<'src>> {
-        while let Some(line) = self.lines.next() {
+        for line in self.lines.by_ref() {
             if let Some(cell) = Cell::from_bytes(line) {
                 return Some(cell);
             }

@@ -83,18 +83,18 @@ fn run(matches: clap::ArgMatches) -> Result<()> {
     eprintln!("loaded data information");
 
     if let Some(arg) = matches.subcommand_matches("dump") {
-        let dump_type = arg.value_of("type").unwrap_or_else(|| "all");
-        let format = arg.value_of("format").unwrap_or_else(|| "dbg");
+        let dump_type = arg.value_of("type").unwrap_or("all");
+        let format = arg.value_of("format").unwrap_or("dbg");
 
         match dump_type {
-            "all" => serialize_obj(&(&meta, &data), format),
+            "all" => serialize_obj((&meta, &data), format),
             "meta" => serialize_obj(&meta, format),
             "obj" => serialize_obj(&data, format),
             _ => panic!("hello"),
         }
     } else if let Some(arg) = matches.subcommand_matches("parseobj") {
         let file_path: PathBuf = arg.value_of("FILE").unwrap().into();
-        let format = arg.value_of("format").unwrap_or_else(|| "dbg");
+        let format = arg.value_of("format").unwrap_or("dbg");
         let kind = file_path.extension().unwrap().to_string_lossy();
         let mut data = ObjectStore::default();
 

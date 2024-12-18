@@ -49,7 +49,7 @@ impl ObjectId {
     }
 
     pub fn to_string(self) -> Option<String> {
-        let bytes: Vec<u8> = (&self.id.to_be_bytes()).iter().copied().collect();
+        let bytes: Vec<u8> = self.id.to_be_bytes().to_vec();
         String::from_utf8(bytes).ok()
     }
 }
@@ -196,10 +196,7 @@ impl ObjectKind {
     ///
     /// This affects the layout of WC3 object data files.
     pub fn is_data_type(self) -> bool {
-        match self {
-            ObjectKind::DOODAD | ObjectKind::ABILITY | ObjectKind::UPGRADE => true,
-            _ => false,
-        }
+        matches!(self, ObjectKind::DOODAD | ObjectKind::ABILITY | ObjectKind::UPGRADE)
     }
 
     pub fn to_typestr(self) -> &'static str {

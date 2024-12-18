@@ -31,7 +31,7 @@ pub fn lua_error_root_cause(error: &LuaError) -> anyhow::Error {
             anyhow::anyhow!("{}\n{}", lua_error_root_cause(cause), traceback)
         }
         LuaError::ExternalError(external) => {
-            if let Some(error) = Error::downcast_ref::<LuaError>(external.as_ref()) {
+            if let Some(error) = <dyn Error>::downcast_ref::<LuaError>(external.as_ref()) {
                 lua_error_root_cause(error)
             } else {
                 anyhow::anyhow!("{}", external)

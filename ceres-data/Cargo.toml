@@ -2,7 +2,7 @@
 name = "ceres-data"
 version = "0.1.0-INTERNAL"
 authors = ["SamuelMoriarty <mori@reu.moe>"]
-edition = "2018"
+edition = "2021"
 build = "build.rs"
 
 [dependencies]
